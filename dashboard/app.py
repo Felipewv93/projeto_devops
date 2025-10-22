@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Dashboard de Filmes")
+st.title("🎬 Dashboard de Filmes")
 st.write("Dashboard interativo para análise de bilheteria, gêneros e estúdios")
 
 # Carregar dados
@@ -21,17 +21,24 @@ def carregar_filmes():
     response = requests.get(f"{API_URL}/filmes")
     df = pd.DataFrame(response.json())
     df["estudios_lista"] = df["estudio"].apply(lambda x: [e.strip() for e in x.split("/")])
+    # Formatar bilheteria com separador e cifrão
+    df["bilheteria_formatada"] = df["bilheteria"].apply(lambda x: f"${x:,.0f}")
     return df
 
 @st.cache_data(ttl=300)
 def carregar_analise_genero():
     response = requests.get(f"{API_URL}/filmes/analise")
-    return pd.DataFrame(response.json())
+    df = pd.DataFrame(response.json())
+    df["bilheteria_total_formatada"] = df["bilheteria_total"].apply(lambda x: f"${x:,.0f}")
+    return df
 
 @st.cache_data(ttl=300)
 def carregar_analise_estudio():
     response = requests.get(f"{API_URL}/filmes/analise_estudios")
-    return pd.DataFrame(response.json())
+    df = pd.DataFrame(response.json())
+    df["bilheteria_total_formatada"] = df["bilheteria_total"].apply(lambda x: f"${x:,.0f}")
+    df["bilheteria_media_formatada"] = df["bilheteria_media"].apply(lambda x: f"${x:,.0f}")
+    return df
 
 # Inserir filme
 def inserir_filme(dados):
@@ -44,7 +51,7 @@ try:
     df_analise_estudio = carregar_analise_estudio()
 
     # FILTROS
-    st.sidebar.subheader("Filtros")
+    st.sidebar.subheader("🎛️ Filtros")
     generos = ["Todos"] + sorted(df_filmes["genero"].unique().tolist())
     genero_selecionado = st.sidebar.selectbox("Filtrar por gênero:", generos)
 
@@ -59,9 +66,13 @@ try:
     if estudio_selecionado != "Todos":
         df_filtrado = df_filtrado[df_filtrado["estudios_lista"].apply(lambda x: estudio_selecionado in x)]
 
-    tab1, tab2 = st.tabs(["Visualização de Dados", "Inserir Novo Filme"])
+    tab1, tab2 = st.tabs(["📊 Visualização de Dados", "➕ Inserir Novo Filme"])
 
     with tab1:
+        # Mostrar primeiro a lista de filmes
+        st.subheader("🎥 Filmes Filtrados")
+        st.dataframe(df_filtrado.drop(columns=["estudios_lista", "bilheteria"]))
+
         col1, col2 = st.columns(2)
 
         # Gráfico bilheteria total por gênero
@@ -71,11 +82,13 @@ try:
                 df_analise_genero,
                 x="genero",
                 y="bilheteria_total",
-                text_auto=True,
+                text=df_analise_genero["bilheteria_total"].apply(lambda x: f"${x:,.0f}"),
                 color="genero",
                 title="Bilheteria Total por Gênero",
                 height=400
             )
+            fig1.update_traces(showlegend=False, textposition="outside")
+            fig1.update_layout(xaxis_title="", yaxis_title="")
             st.plotly_chart(fig1, use_container_width=True)
 
         # Gráfico distribuição de filmes por gênero
@@ -89,40 +102,41 @@ try:
             )
             st.plotly_chart(fig2, use_container_width=True)
 
-        # Gráfico bilheteria por estúdio (total e média)
+        # Gráficos de estúdio
         st.subheader("Bilheteria por Estúdio")
-        df_estudio_plot = df_analise_estudio.copy()
-        df_estudio_plot = df_estudio_plot.sort_values("bilheteria_total", ascending=False)
+        df_estudio_plot = df_analise_estudio.sort_values("bilheteria_total", ascending=False)
 
         col3, col4 = st.columns(2)
 
+        # Bilheteria Total
         with col3:
             fig3 = px.bar(
                 df_estudio_plot,
-                x="estudio",
-                y="bilheteria_total",
-                text_auto=True,
-                color="estudio",
+                y="estudio",
+                x="bilheteria_total",
+                orientation="h",
                 title="Bilheteria Total por Estúdio",
+                text=df_estudio_plot["bilheteria_total"].apply(lambda x: f"${x:,.0f}"),
                 height=400
             )
+            fig3.update_traces(textposition="outside", showlegend=False)
+            fig3.update_layout(yaxis={"categoryorder": "total ascending"}, xaxis_title="", yaxis_title="")
             st.plotly_chart(fig3, use_container_width=True)
 
+        # Bilheteria Média
         with col4:
             fig4 = px.bar(
                 df_estudio_plot,
-                x="estudio",
-                y="bilheteria_media",
-                text_auto=True,
-                color="estudio",
+                y="estudio",
+                x="bilheteria_media",
+                orientation="h",
                 title="Bilheteria Média por Estúdio",
+                text=df_estudio_plot["bilheteria_media"].apply(lambda x: f"${x:,.0f}"),
                 height=400
             )
+            fig4.update_traces(textposition="outside", showlegend=False)
+            fig4.update_layout(yaxis={"categoryorder": "total ascending"}, xaxis_title="", yaxis_title="")
             st.plotly_chart(fig4, use_container_width=True)
-
-        # Tabela de filmes filtrados
-        st.subheader("Filmes Filtrados")
-        st.dataframe(df_filtrado)
 
     # Aba de inserção
     with tab2:
@@ -150,7 +164,7 @@ try:
                         "bilheteria": bilheteria
                     }
                     if inserir_filme(novo_filme):
-                        st.success("Filme adicionado com sucesso!")
+                        st.success("Filme adicionado com sucesso! 🎉")
                         st.cache_data.clear()
                         st.rerun()
                     else:
