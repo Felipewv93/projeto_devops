@@ -1,4 +1,3 @@
-# dashboard/app.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -12,33 +11,37 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🎬 Dashboard de Filmes")
+st.title("🎬 Top 20 Maiores Bilheterias do Cinema")
 st.write("Dashboard interativo para análise de bilheteria, gêneros e estúdios")
 
-# Carregar dados
+# Funções de carregamento
+
 @st.cache_data(ttl=300)
 def carregar_filmes():
     response = requests.get(f"{API_URL}/filmes")
     df = pd.DataFrame(response.json())
     df["estudios_lista"] = df["estudio"].apply(lambda x: [e.strip() for e in x.split("/")])
-    # Formatar bilheteria com separador e cifrão
-    df["bilheteria_formatada"] = df["bilheteria"].apply(lambda x: f"${x:,.0f}")
     return df
 
 @st.cache_data(ttl=300)
 def carregar_analise_genero():
     response = requests.get(f"{API_URL}/filmes/analise")
-    df = pd.DataFrame(response.json())
-    df["bilheteria_total_formatada"] = df["bilheteria_total"].apply(lambda x: f"${x:,.0f}")
-    return df
+    return pd.DataFrame(response.json())
 
 @st.cache_data(ttl=300)
 def carregar_analise_estudio():
     response = requests.get(f"{API_URL}/filmes/analise_estudios")
-    df = pd.DataFrame(response.json())
-    df["bilheteria_total_formatada"] = df["bilheteria_total"].apply(lambda x: f"${x:,.0f}")
-    df["bilheteria_media_formatada"] = df["bilheteria_media"].apply(lambda x: f"${x:,.0f}")
-    return df
+    return pd.DataFrame(response.json())
+
+# Função para formatação
+
+def formatar_bilheteria(x):
+    if x >= 1_000_000_000:
+        return f"${x/1_000_000_000:.2f}B"
+    elif x >= 1_000_000:
+        return f"${x/1_000_000:.2f}M"
+    else:
+        return f"${x:,.0f}"
 
 # Inserir filme
 def inserir_filme(dados):
@@ -46,12 +49,15 @@ def inserir_filme(dados):
     return response.status_code in [200, 201]
 
 try:
+    # Carregar dados
+
     df_filmes = carregar_filmes()
     df_analise_genero = carregar_analise_genero()
     df_analise_estudio = carregar_analise_estudio()
 
     # FILTROS
-    st.sidebar.subheader("🎛️ Filtros")
+
+    st.sidebar.subheader("Filtros")
     generos = ["Todos"] + sorted(df_filmes["genero"].unique().tolist())
     genero_selecionado = st.sidebar.selectbox("Filtrar por gênero:", generos)
 
@@ -66,49 +72,51 @@ try:
     if estudio_selecionado != "Todos":
         df_filtrado = df_filtrado[df_filtrado["estudios_lista"].apply(lambda x: estudio_selecionado in x)]
 
-    tab1, tab2 = st.tabs(["📊 Visualização de Dados", "➕ Inserir Novo Filme"])
+    # TABS
+
+    tab1, tab2 = st.tabs(["Visualização de Dados", "Inserir Novo Filme"])
 
     with tab1:
-        # Mostrar primeiro a lista de filmes
-        st.subheader("🎥 Filmes Filtrados")
-        st.dataframe(df_filtrado.drop(columns=["estudios_lista", "bilheteria"]))
+
+        # Lista de filmes (primeira visualização)
+
+        st.subheader("📽️ Filmes")
+        df_mostrar = df_filtrado.drop(columns=["estudios_lista"])
+        st.dataframe(df_mostrar)
+
+        # Gráficos de gênero
 
         col1, col2 = st.columns(2)
 
-        # Gráfico bilheteria total por gênero
         with col1:
-            st.subheader("Bilheteria Total por Gênero")
+            st.subheader("🎭 Bilheteria Total por Gênero")
             fig1 = px.bar(
                 df_analise_genero,
                 x="genero",
                 y="bilheteria_total",
-                text=df_analise_genero["bilheteria_total"].apply(lambda x: f"${x:,.0f}"),
+                text=df_analise_genero["bilheteria_total"].apply(formatar_bilheteria),
                 color="genero",
-                title="Bilheteria Total por Gênero",
-                height=400
+                height=450
             )
-            fig1.update_traces(showlegend=False, textposition="outside")
+            fig1.update_traces(textposition="outside", showlegend=False)
             fig1.update_layout(xaxis_title="", yaxis_title="")
             st.plotly_chart(fig1, use_container_width=True)
 
-        # Gráfico distribuição de filmes por gênero
         with col2:
-            st.subheader("Distribuição de Filmes por Gênero")
+            st.subheader("🧮 Distribuição de Filmes por Gênero")
             fig2 = px.pie(
                 df_analise_genero,
                 values="total_filmes",
-                names="genero",
-                title="Distribuição de Filmes por Gênero"
+                names="genero"
             )
             st.plotly_chart(fig2, use_container_width=True)
 
         # Gráficos de estúdio
-        st.subheader("Bilheteria por Estúdio")
-        df_estudio_plot = df_analise_estudio.sort_values("bilheteria_total", ascending=False)
 
+        st.subheader("💲 Bilheteria por Estúdio")
+        df_estudio_plot = df_analise_estudio.sort_values("bilheteria_total", ascending=False)
         col3, col4 = st.columns(2)
 
-        # Bilheteria Total
         with col3:
             fig3 = px.bar(
                 df_estudio_plot,
@@ -116,14 +124,18 @@ try:
                 x="bilheteria_total",
                 orientation="h",
                 title="Bilheteria Total por Estúdio",
-                text=df_estudio_plot["bilheteria_total"].apply(lambda x: f"${x:,.0f}"),
-                height=400
+                text=df_estudio_plot["bilheteria_total"].apply(formatar_bilheteria),
+                height=500
             )
-            fig3.update_traces(textposition="outside", showlegend=False)
-            fig3.update_layout(yaxis={"categoryorder": "total ascending"}, xaxis_title="", yaxis_title="")
+            fig3.update_traces(textposition="inside",
+            showlegend=False,
+            textfont_color="black")
+            fig3.update_layout(xaxis_title="",
+            yaxis_title="",
+            yaxis={"categoryorder": "total ascending"},
+            margin_r=0)
             st.plotly_chart(fig3, use_container_width=True)
 
-        # Bilheteria Média
         with col4:
             fig4 = px.bar(
                 df_estudio_plot,
@@ -131,22 +143,23 @@ try:
                 x="bilheteria_media",
                 orientation="h",
                 title="Bilheteria Média por Estúdio",
-                text=df_estudio_plot["bilheteria_media"].apply(lambda x: f"${x:,.0f}"),
-                height=400
+                text=df_estudio_plot["bilheteria_media"].apply(formatar_bilheteria),
+                height=500
             )
-            fig4.update_traces(textposition="outside", showlegend=False)
-            fig4.update_layout(yaxis={"categoryorder": "total ascending"}, xaxis_title="", yaxis_title="")
+            fig4.update_traces(textposition="inside", showlegend=False, textfont_color="black")
+            fig4.update_layout(xaxis_title="", yaxis_title="", yaxis={"categoryorder": "total ascending"})
             st.plotly_chart(fig4, use_container_width=True)
 
     # Aba de inserção
+
     with tab2:
-        st.subheader("Adicionar Novo Filme")
+        st.subheader("➕ Adicionar Novo Filme")
         with st.form("novo_filme_form"):
             titulo = st.text_input("Título do Filme")
             diretor = st.text_input("Diretor")
             estudio = st.text_input("Estúdio(s) (separe múltiplos por /)")
             genero = st.text_input("Gênero")
-            ano_lancamento = st.number_input("Ano de Lançamento", min_value=1900, max_value=2100, step=1)
+            ano = st.number_input("Ano de Lançamento", min_value=1900, max_value=2100, step=1)
             bilheteria = st.number_input("Bilheteria (USD)", min_value=0, step=1)
 
             submitted = st.form_submit_button("Adicionar Filme")
@@ -160,11 +173,11 @@ try:
                         "diretor": diretor,
                         "estudio": estudio,
                         "genero": genero,
-                        "ano_lancamento": ano_lancamento,
+                        "ano": ano,
                         "bilheteria": bilheteria
                     }
                     if inserir_filme(novo_filme):
-                        st.success("Filme adicionado com sucesso! 🎉")
+                        st.success("Filme adicionado com sucesso!")
                         st.cache_data.clear()
                         st.rerun()
                     else:

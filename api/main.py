@@ -1,4 +1,3 @@
-# api/main.py
 from fastapi import FastAPI, Depends
 from sqlalchemy import create_engine, Column, Integer, String, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
@@ -23,7 +22,7 @@ class FilmeDB(Base):
     diretor = Column(String(50), nullable=False)
     estudio = Column(String(100), nullable=False)  # múltiplos estúdios separados por "/"
     genero = Column(String(50), nullable=False)
-    ano_lancamento = Column(Integer, nullable=False)
+    ano = Column(Integer, nullable=False)
     bilheteria = Column(BigInteger, nullable=False)
 
 # Modelo Pydantic para leitura
@@ -33,7 +32,7 @@ class Filme(BaseModel):
     diretor: str
     estudio: str
     genero: str
-    ano_lancamento: int
+    ano: int
     bilheteria: int
 
     class Config:
@@ -45,7 +44,7 @@ class FilmeCreate(BaseModel):
     diretor: str
     estudio: str
     genero: str
-    ano_lancamento: int
+    ano: int
     bilheteria: int
 
 # Dependência para sessão do DB
@@ -58,9 +57,7 @@ def get_db():
 
 app = FastAPI(title="API de Filmes")
 
-# -----------------------------
 # Endpoints
-# -----------------------------
 
 # Listar todos os filmes
 @app.get("/filmes", response_model=List[Filme])
